@@ -1419,21 +1419,42 @@ void cs_hmac_sha1(const unsigned char *key, size_t keylen,
 
 void mbuf_init(struct mbuf *mbuf, size_t initial_size) WEAK;
 void mbuf_init(struct mbuf *mbuf, size_t initial_size) {
+#if MG_ENABLE_THREADSAFE_MBUF
+  pthread_mutex_init(&(mbuf->mutex), NULL);
+#endif
+
   mbuf->len = mbuf->size = 0;
   mbuf->buf = NULL;
   mbuf_resize(mbuf, initial_size);
+
 }
 
 void mbuf_free(struct mbuf *mbuf) WEAK;
 void mbuf_free(struct mbuf *mbuf) {
+#if MG_ENABLE_THREADSAFE_MBUF
+  pthread_mutex_lock(&(mbuf->mutex));
+#endif
+
   if (mbuf->buf != NULL) {
     MBUF_FREE(mbuf->buf);
-    mbuf_init(mbuf, 0);
+    mbuf->len = mbuf->size = 0;
+    mbuf->buf = NULL;
   }
+
+#if MG_ENABLE_THREADSAFE_MBUF
+    pthread_mutex_unlock(&(mbuf->mutex));
+    pthread_mutex_destroy(&(mbuf->mutex));
+#endif
 }
 
 void mbuf_resize(struct mbuf *a, size_t new_size) WEAK;
 void mbuf_resize(struct mbuf *a, size_t new_size) {
+#if MG_ENABLE_THREADSAFE_MBUF
+  if (a != NULL) {
+    pthread_mutex_lock(&(a->mutex));
+  }
+#endif
+
   if (new_size > a->size || (new_size < a->size && new_size >= a->len)) {
     char *buf = (char *) MBUF_REALLOC(a->buf, new_size);
     /*
@@ -1445,6 +1466,12 @@ void mbuf_resize(struct mbuf *a, size_t new_size) {
     a->buf = buf;
     a->size = new_size;
   }
+
+#if MG_ENABLE_THREADSAFE_MBUF
+  if (a != NULL) {
+    pthread_mutex_unlock(&(a->mutex));
+  }
+#endif
 }
 
 void mbuf_trim(struct mbuf *mbuf) WEAK;
@@ -1455,10 +1482,13 @@ void mbuf_trim(struct mbuf *mbuf) {
 size_t mbuf_insert(struct mbuf *a, size_t off, const void *buf, size_t) WEAK;
 size_t mbuf_insert(struct mbuf *a, size_t off, const void *buf, size_t len) {
   char *p = NULL;
-
   assert(a != NULL);
   assert(a->len <= a->size);
   assert(off <= a->len);
+
+#if MG_ENABLE_THREADSAFE_MBUF
+  pthread_mutex_lock(&(a->mutex));
+#endif
 
   /* check overflow */
   if (~(size_t) 0 - (size_t) a->buf < len) return 0;
@@ -1482,6 +1512,10 @@ size_t mbuf_insert(struct mbuf *a, size_t off, const void *buf, size_t len) {
     }
   }
 
+#if MG_ENABLE_THREADSAFE_MBUF
+  pthread_mutex_unlock(&(a->mutex));
+#endif
+
   return len;
 }
 
@@ -1492,10 +1526,16 @@ size_t mbuf_append(struct mbuf *a, const void *buf, size_t len) {
 
 void mbuf_remove(struct mbuf *mb, size_t n) WEAK;
 void mbuf_remove(struct mbuf *mb, size_t n) {
+#if MG_ENABLE_THREADSAFE_MBUF
+  pthread_mutex_lock(&(mb->mutex));
+#endif
   if (n > 0 && n <= mb->len) {
     memmove(mb->buf, mb->buf + n, mb->len - n);
     mb->len -= n;
   }
+#if MG_ENABLE_THREADSAFE_MBUF
+  pthread_mutex_unlock(&(mb->mutex));
+#endif
 }
 
 #endif /* EXCLUDE_COMMON */

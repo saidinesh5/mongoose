@@ -1968,6 +1968,10 @@ struct mbuf {
   char *buf;   /* Buffer pointer */
   size_t len;  /* Data length. Data is located between offset 0 and len. */
   size_t size; /* Buffer size allocated by realloc(1). Must be >= len */
+
+#if MG_ENABLE_THREADSAFE_MBUF
+  pthread_mutex_t mutex;
+#endif
 };
 
 /*
